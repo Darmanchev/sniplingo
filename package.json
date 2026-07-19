@@ -1,14 +1,26 @@
 {
   "name": "sniplingo",
-  "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "description": "Select a page area, recognize its text, and translate it.",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build": "tsc"
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
   },
-  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.5.3"
+    "typescript": "^5.9.3",
+    "wxt": "^0.20.27"
   },
-  "private": true
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/rus": "^1.0.0",
+    "tesseract.js": "^7.0.0"
+  }
 }
