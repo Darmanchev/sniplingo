@@ -5,6 +5,10 @@ export default defineConfig({
   manifest: {
     name: 'SnipLingo — OCR & Translate',
     description: 'Select a page area, recognize its text, and translate it.',
-    permissions: ['activeTab', 'clipboardWrite'],
+    permissions: [
+      'activeTab',
+      'clipboardWrite',
+      'http://127.0.0.1:8787/*',
+    ],
   },
 });

@@ -43,9 +43,3 @@ export function isTranslateTextMessage(
 export function isTargetLanguage(value: unknown): value is TargetLanguage {
   return TARGET_LANGUAGES.some(({ code }) => code === value);
 }
-
-export function getTargetLanguageLabel(language: TargetLanguage): string {
-  return (
-    TARGET_LANGUAGES.find(({ code }) => code === language)?.label ?? language
-  );
-}

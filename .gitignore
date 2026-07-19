@@ -28,6 +28,10 @@ lerna-debug.log*
 !.vscode/extensions.json
 .idea
 .DS_Store
+.output
+.wxt
+.env
+
 *.suo
 *.ntvs*
 *.njsproj

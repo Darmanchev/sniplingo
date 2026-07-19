@@ -383,7 +383,7 @@ export class ResultPanel {
 
   showTranslationResult(text: string): void {
     this.setTranslationControlsDisabled(false);
-    this.translationStatus.textContent = 'Mock translation';
+    this.translationStatus.textContent = 'Translation complete';
     this.translationError.hidden = true;
     this.translatedText.textContent = text;
     this.translatedText.hidden = false;

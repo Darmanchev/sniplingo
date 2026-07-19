@@ -20,7 +20,7 @@ export class OcrService {
     try {
       const worker = await this.getWorker();
       const result = await worker.recognize(image);
-      return result.data.text.trim();
+      return sanitizeOcrText(result.data.text);
     } finally {
       this.progressListener = null;
     }
@@ -47,6 +47,16 @@ export class OcrService {
 
     return this.workerPromise;
   }
+}
+
+export function sanitizeOcrText(text: string): string {
+  return text
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{M}\p{N}\r\n\t ]+/gu, ' ')
+    .replace(/[\t ]+/g, ' ')
+    .replace(/ *\r?\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function getAssetDirectoryUrl(

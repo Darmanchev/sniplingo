@@ -1,20 +1,60 @@
-import {
-  getTargetLanguageLabel,
-  type TargetLanguage,
-} from '@/types/translation';
+import type { TargetLanguage } from '@/types/translation';
 
-const MOCK_DELAY_MS = 450;
+const TRANSLATION_API_URL =
+  import.meta.env.WXT_TRANSLATION_API_URL ??
+  'http://127.0.0.1:8787/v1/translate';
+const REQUEST_TIMEOUT_MS = 25_000;
+
+interface TranslationApiResponse {
+  error?: unknown;
+  translatedText?: unknown;
+}
 
 export async function translateText(
   text: string,
   targetLanguage: TargetLanguage,
 ): Promise<string> {
-  await delay(MOCK_DELAY_MS);
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), REQUEST_TIMEOUT_MS);
 
-  const languageLabel = getTargetLanguageLabel(targetLanguage);
-  return `[Mock translation to ${languageLabel}]\n\n${text}`;
+  try {
+    const response = await fetch(TRANSLATION_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text, targetLanguage }),
+      signal: abortController.signal,
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | TranslationApiResponse
+      | null;
+
+    if (!response.ok) {
+      throw new Error(readApiError(payload, response.status));
+    }
+
+    if (typeof payload?.translatedText !== 'string') {
+      throw new Error('Translation backend returned an invalid response.');
+    }
+
+    return payload.translatedText;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Translation request timed out.');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function readApiError(
+  payload: TranslationApiResponse | null,
+  status: number,
+): string {
+  return typeof payload?.error === 'string'
+    ? payload.error
+    : `Translation backend failed with status ${status}.`;
 }
