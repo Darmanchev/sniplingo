@@ -1,6 +1,7 @@
 import { cropImage } from '@/services/imageCrop';
 import { OcrService } from '@/services/ocr';
 import { captureVisibleTab } from '@/services/screenshot';
+import { translateText } from '@/services/translator';
 import {
   OCR_PROGRESS_MESSAGE,
   isRecognizeImageMessage,
@@ -15,6 +16,11 @@ import {
   type CaptureSelectionResponse,
   type StartSelectionMessage,
 } from '@/types/selection';
+import {
+  isTranslateTextMessage,
+  type TranslateTextMessage,
+  type TranslateTextResponse,
+} from '@/types/translation';
 
 export default defineBackground(() => {
   const ocrService = new OcrService();
@@ -43,6 +49,10 @@ export default defineBackground(() => {
 
     if (isRecognizeImageMessage(message)) {
       return recognizeImage(message, sender.tab?.id, ocrService);
+    }
+
+    if (isTranslateTextMessage(message)) {
+      return translateRecognizedText(message);
     }
   });
 });
@@ -103,5 +113,20 @@ async function recognizeImage(
   } catch (error) {
     console.error('SnipLingo OCR failed:', error);
     return { ok: false, error: getErrorMessage(error, 'OCR failed.') };
+  }
+}
+
+async function translateRecognizedText(
+  message: TranslateTextMessage,
+): Promise<TranslateTextResponse> {
+  try {
+    const translatedText = await translateText(
+      message.text,
+      message.targetLanguage,
+    );
+    return { ok: true, translatedText };
+  } catch (error) {
+    console.error('SnipLingo translation failed:', error);
+    return { ok: false, error: getErrorMessage(error, 'Translation failed.') };
   }
 }

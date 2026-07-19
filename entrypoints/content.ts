@@ -1,6 +1,5 @@
 import { ResultPanel } from '@/components/ResultPanel';
 import { SelectionOverlay } from '@/components/SelectionOverlay';
-import { createOcrTestImage } from '@/services/ocrTestImage';
 import {
   RECOGNIZE_IMAGE_MESSAGE,
   isOcrProgressMessage,
@@ -14,6 +13,12 @@ import {
   type CaptureSelectionResponse,
   type SelectionRect,
 } from '@/types/selection';
+import {
+  TRANSLATE_TEXT_MESSAGE,
+  type TargetLanguage,
+  type TranslateTextMessage,
+  type TranslateTextResponse,
+} from '@/types/translation';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -22,6 +27,7 @@ export default defineContentScript({
     let resultPanel: ResultPanel | null = null;
     let operationId = 0;
     let activeOcrRequestId: string | null = null;
+    let activeTranslationRequestId: string | null = null;
 
     browser.runtime.onMessage.addListener((message: unknown) => {
       if (isOcrProgressMessage(message)) {
@@ -35,6 +41,7 @@ export default defineContentScript({
 
       operationId += 1;
       activeOcrRequestId = null;
+      activeTranslationRequestId = null;
       overlay?.destroy();
       resultPanel?.destroy();
       resultPanel = null;
@@ -80,11 +87,8 @@ export default defineContentScript({
         resultPanel.mount();
 
         if (response.ok) {
-          resultPanel.showImage(response.imageDataUrl);
           const panel = resultPanel;
-          panel.enableOcrTest(() => {
-            void runOcrTest(panel, completedOperationId);
-          });
+          void runOcr(response.imageDataUrl, panel, completedOperationId);
         } else {
           resultPanel.showError(response.error);
         }
@@ -98,20 +102,20 @@ export default defineContentScript({
       }
     }
 
-    async function runOcrTest(
+    async function runOcr(
+      imageDataUrl: string,
       panel: ResultPanel,
       completedOperationId: number,
     ): Promise<void> {
-      const testImage = createOcrTestImage();
       const requestId = crypto.randomUUID();
       activeOcrRequestId = requestId;
-      panel.showOcrLoading(testImage);
+      panel.showOcrLoading();
 
       try {
         const request: RecognizeImageMessage = {
           type: RECOGNIZE_IMAGE_MESSAGE,
           requestId,
-          imageDataUrl: testImage,
+          imageDataUrl,
         };
         const response = (await browser.runtime.sendMessage(
           request,
@@ -127,6 +131,14 @@ export default defineContentScript({
 
         if (response.ok) {
           panel.showOcrResult(response.text);
+          panel.enableTranslation((targetLanguage) => {
+            void runTranslation(
+              response.text,
+              targetLanguage,
+              panel,
+              completedOperationId,
+            );
+          });
         } else {
           panel.showOcrError(response.error);
         }
@@ -139,6 +151,55 @@ export default defineContentScript({
       } finally {
         if (activeOcrRequestId === requestId) {
           activeOcrRequestId = null;
+        }
+      }
+    }
+
+    async function runTranslation(
+      text: string,
+      targetLanguage: TargetLanguage,
+      panel: ResultPanel,
+      completedOperationId: number,
+    ): Promise<void> {
+      const requestId = crypto.randomUUID();
+      activeTranslationRequestId = requestId;
+      panel.showTranslationLoading();
+
+      try {
+        const request: TranslateTextMessage = {
+          type: TRANSLATE_TEXT_MESSAGE,
+          requestId,
+          targetLanguage,
+          text,
+        };
+        const response = (await browser.runtime.sendMessage(
+          request,
+        )) as TranslateTextResponse;
+
+        if (
+          completedOperationId !== operationId ||
+          resultPanel !== panel ||
+          activeTranslationRequestId !== requestId
+        ) {
+          return;
+        }
+
+        if (response.ok) {
+          panel.showTranslationResult(response.translatedText);
+        } else {
+          panel.showTranslationError(response.error);
+        }
+      } catch (error) {
+        if (completedOperationId !== operationId || resultPanel !== panel) {
+          return;
+        }
+
+        panel.showTranslationError(
+          getErrorMessage(error, 'Translation failed.'),
+        );
+      } finally {
+        if (activeTranslationRequestId === requestId) {
+          activeTranslationRequestId = null;
         }
       }
     }
