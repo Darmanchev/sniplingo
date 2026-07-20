@@ -3,35 +3,75 @@ import type {
   ViewportSize,
 } from '@/types/selection';
 
+export interface ImageSize {
+  width: number;
+  height: number;
+}
+
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function calculateCropRect(
+  rect: SelectionRect,
+  viewport: ViewportSize,
+  imageSize: ImageSize,
+): CropRect {
+  assertPositiveSize(viewport, 'Viewport');
+  assertPositiveSize(imageSize, 'Image');
+
+  if (
+    !Number.isFinite(rect.x) ||
+    !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.width) ||
+    !Number.isFinite(rect.height) ||
+    rect.x < 0 ||
+    rect.y < 0 ||
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    throw new Error('Selection coordinates must be finite and non-negative.');
+  }
+
+  const scaleX = imageSize.width / viewport.width;
+  const scaleY = imageSize.height / viewport.height;
+  const x = Math.min(imageSize.width, Math.max(0, Math.floor(rect.x * scaleX)));
+  const y = Math.min(imageSize.height, Math.max(0, Math.floor(rect.y * scaleY)));
+  const right = Math.min(
+    imageSize.width,
+    Math.max(0, Math.ceil((rect.x + rect.width) * scaleX)),
+  );
+  const bottom = Math.min(
+    imageSize.height,
+    Math.max(0, Math.ceil((rect.y + rect.height) * scaleY)),
+  );
+  const width = right - x;
+  const height = bottom - y;
+
+  if (width < 1 || height < 1) {
+    throw new Error('The selected area is outside the captured image.');
+  }
+
+  return { x, y, width, height };
+}
+
 export async function cropImage(
   imageDataUrl: string,
   rect: SelectionRect,
   viewport: ViewportSize,
 ): Promise<string> {
   const image = await loadImage(imageDataUrl);
-  const scaleX = image.naturalWidth / viewport.width;
-  const scaleY = image.naturalHeight / viewport.height;
-
-  const sourceX = Math.max(0, Math.floor(rect.x * scaleX));
-  const sourceY = Math.max(0, Math.floor(rect.y * scaleY));
-  const sourceRight = Math.min(
-    image.naturalWidth,
-    Math.ceil((rect.x + rect.width) * scaleX),
-  );
-  const sourceBottom = Math.min(
-    image.naturalHeight,
-    Math.ceil((rect.y + rect.height) * scaleY),
-  );
-  const sourceWidth = sourceRight - sourceX;
-  const sourceHeight = sourceBottom - sourceY;
-
-  if (sourceWidth < 1 || sourceHeight < 1) {
-    throw new Error('The selected area is outside the captured image.');
-  }
+  const cropRect = calculateCropRect(rect, viewport, {
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+  });
 
   const canvas = document.createElement('canvas');
-  canvas.width = sourceWidth;
-  canvas.height = sourceHeight;
+  canvas.width = cropRect.width;
+  canvas.height = cropRect.height;
 
   const context = canvas.getContext('2d');
   if (context === null) {
@@ -40,17 +80,28 @@ export async function cropImage(
 
   context.drawImage(
     image,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
+    cropRect.x,
+    cropRect.y,
+    cropRect.width,
+    cropRect.height,
     0,
     0,
-    sourceWidth,
-    sourceHeight,
+    cropRect.width,
+    cropRect.height,
   );
 
   return canvas.toDataURL('image/png');
+}
+
+function assertPositiveSize(size: ImageSize, label: string): void {
+  if (
+    !Number.isFinite(size.width) ||
+    !Number.isFinite(size.height) ||
+    size.width <= 0 ||
+    size.height <= 0
+  ) {
+    throw new Error(`${label} dimensions must be positive and finite.`);
+  }
 }
 
 function loadImage(source: string): Promise<HTMLImageElement> {

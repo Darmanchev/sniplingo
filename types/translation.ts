@@ -36,7 +36,7 @@ export function isTranslateTextMessage(
     message.type === TRANSLATE_TEXT_MESSAGE &&
     'requestId' in message &&
     typeof message.requestId === 'string' &&
-    message.requestId.length > 0 &&
+    message.requestId.trim().length > 0 &&
     'targetLanguage' in message &&
     isTargetLanguage(message.targetLanguage) &&
     'text' in message &&

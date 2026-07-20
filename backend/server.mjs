@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import {
+  DeepLError,
+  TARGET_LANGUAGE_CODES,
+  requestDeepLTranslation,
+} from './deepl.mjs';
 
 const HOST = process.env.TRANSLATION_SERVER_HOST ?? '127.0.0.1';
 const PORT = parsePort(process.env.TRANSLATION_SERVER_PORT ?? '8787');
@@ -9,25 +14,22 @@ const DEEPL_API_URL =
 const MAX_REQUEST_BYTES = 128 * 1024;
 const REQUEST_TIMEOUT_MS = 20_000;
 
-const TARGET_LANGUAGE_CODES = Object.freeze({
-  bg: 'BG',
-  de: 'DE',
-  en: 'EN-US',
-  es: 'ES',
-  ru: 'RU',
-});
-
 if (!DEEPL_API_KEY) {
   throw new Error('DEEPL_API_KEY is missing. Add it to .env.');
 }
 
 const server = createServer((request, response) => {
   void handleRequest(request, response).catch((error) => {
-    const status = error instanceof HttpError ? error.status : 500;
+    const status =
+      error instanceof HttpError || error instanceof DeepLError
+        ? error.status
+        : 500;
     const message =
-      error instanceof HttpError ? error.message : 'Internal server error.';
+      error instanceof HttpError || error instanceof DeepLError
+        ? error.message
+        : 'Internal server error.';
 
-    if (!(error instanceof HttpError)) {
+    if (!(error instanceof HttpError) && !(error instanceof DeepLError)) {
       console.error('Translation server error:', error);
     }
 
@@ -69,7 +71,11 @@ async function handleRequest(request, response) {
   const targetLanguage = readTargetLanguage(body);
   const requestId = randomUUID();
 
-  const result = await requestDeepLTranslation(text, targetLanguage);
+  const result = await requestDeepLTranslation(text, targetLanguage, {
+    apiKey: DEEPL_API_KEY,
+    apiUrl: DEEPL_API_URL,
+    timeoutMs: REQUEST_TIMEOUT_MS,
+  });
   console.log(
     `[${requestId}] translated ${Buffer.byteLength(text, 'utf8')} bytes to ${targetLanguage}`,
   );
@@ -78,40 +84,6 @@ async function handleRequest(request, response) {
     translatedText: result.text,
     detectedSourceLanguage: result.detectedSourceLanguage,
   });
-}
-
-async function requestDeepLTranslation(text, targetLanguage) {
-  const response = await fetch(DEEPL_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'SnipLingo/0.0.0',
-    },
-    body: JSON.stringify({
-      text: [text],
-      target_lang: TARGET_LANGUAGE_CODES[targetLanguage],
-    }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throwDeepLError(response.status);
-  }
-
-  const translation = payload?.translations?.[0];
-  if (
-    typeof translation?.text !== 'string' ||
-    typeof translation?.detected_source_language !== 'string'
-  ) {
-    throw new HttpError(502, 'DeepL returned an invalid response.');
-  }
-
-  return {
-    text: translation.text,
-    detectedSourceLanguage: translation.detected_source_language,
-  };
 }
 
 async function readJsonBody(request) {
@@ -152,20 +124,6 @@ function readTargetLanguage(body) {
   }
 
   return language;
-}
-
-function throwDeepLError(status) {
-  if (status === 401 || status === 403) {
-    throw new HttpError(502, 'DeepL authentication failed.');
-  }
-  if (status === 429) {
-    throw new HttpError(429, 'DeepL rate limit exceeded. Try again later.');
-  }
-  if (status === 456) {
-    throw new HttpError(402, 'DeepL character quota exceeded.');
-  }
-
-  throw new HttpError(502, `DeepL request failed with status ${status}.`);
 }
 
 function isAllowedOrigin(origin) {

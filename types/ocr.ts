@@ -28,10 +28,10 @@ export function isRecognizeImageMessage(
     message.type === RECOGNIZE_IMAGE_MESSAGE &&
     'requestId' in message &&
     typeof message.requestId === 'string' &&
-    message.requestId.length > 0 &&
+    message.requestId.trim().length > 0 &&
     'imageDataUrl' in message &&
     typeof message.imageDataUrl === 'string' &&
-    message.imageDataUrl.startsWith('data:image/')
+    isSupportedImageDataUrl(message.imageDataUrl)
   );
 }
 
@@ -45,9 +45,20 @@ export function isOcrProgressMessage(
     message.type === OCR_PROGRESS_MESSAGE &&
     'requestId' in message &&
     typeof message.requestId === 'string' &&
+    message.requestId.trim().length > 0 &&
     'progress' in message &&
     typeof message.progress === 'number' &&
+    Number.isFinite(message.progress) &&
+    message.progress >= 0 &&
+    message.progress <= 1 &&
     'status' in message &&
-    typeof message.status === 'string'
+    typeof message.status === 'string' &&
+    message.status.trim().length > 0
+  );
+}
+
+function isSupportedImageDataUrl(value: string): boolean {
+  return /^data:image\/(?:png|jpeg|webp);base64,(?:(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)|(?:[A-Za-z0-9+/]{4})+)$/.test(
+    value,
   );
 }

@@ -13,10 +13,17 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ocr": "vitest run --config vitest.ocr.config.ts"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "happy-dom": "^20.11.0",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
     "wxt": "^0.20.27"
   },
   "dependencies": {

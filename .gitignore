@@ -10,6 +10,7 @@ lerna-debug.log*
 # Build output
 /tmp
 /out-tsc
+/coverage
 
 # WXT
 /.wxt
