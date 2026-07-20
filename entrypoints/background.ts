@@ -24,12 +24,10 @@ import {
 
 export default defineBackground(() => {
   const ocrService = new OcrService();
+  const extensionAction = browser.action ?? browser.browserAction;
 
-  // An empty popup makes a browser-action click fire onClicked directly.
-  void browser.browserAction.setPopup({ popup: '' });
-
-  browser.browserAction.onClicked.addListener(async (tab) => {
-    if (tab.id === undefined) return;
+  extensionAction.onClicked.addListener(async (tab) => {
+    if (tab.id === undefined || !isSupportedPage(tab.url)) return;
 
     const message: StartSelectionMessage = {
       type: START_SELECTION_MESSAGE,
@@ -37,6 +35,16 @@ export default defineBackground(() => {
 
     try {
       await browser.tabs.sendMessage(tab.id, message);
+      return;
+    } catch {
+      // The content script has not been injected into this page yet.
+    }
+
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['/content-scripts/content.js'],
+      });
     } catch (error) {
       console.error('SnipLingo could not start selection:', error);
     }
@@ -56,6 +64,17 @@ export default defineBackground(() => {
     }
   });
 });
+
+function isSupportedPage(url: string | undefined): boolean {
+  if (url === undefined) return false;
+
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 async function captureAndCrop(
   message: CaptureSelectionMessage,

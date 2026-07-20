@@ -4,14 +4,50 @@ import {
   type TargetLanguage,
 } from '@/types/translation';
 
+export interface ResultPanelLayout {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+type ResizeDirection = 'ne' | 'nw' | 'se' | 'sw';
+
+type PanelInteraction =
+  | {
+      kind: 'drag';
+      pointerId: number;
+      pointerX: number;
+      pointerY: number;
+      startLayout: ResultPanelLayout;
+    }
+  | {
+      direction: ResizeDirection;
+      kind: 'resize';
+      pointerId: number;
+      pointerX: number;
+      pointerY: number;
+      startLayout: ResultPanelLayout;
+    };
+
 interface ResultPanelOptions {
+  initialLayout?: ResultPanelLayout;
   initialTargetLanguage?: TargetLanguage;
+  onLayoutChange: (layout: ResultPanelLayout) => void;
   onScanAgain: () => void;
   onTargetLanguageChange: (language: TargetLanguage) => void;
 }
 
+const VIEWPORT_MARGIN = 8;
+const MIN_PANEL_WIDTH = 360;
+const MIN_PANEL_HEIGHT = 240;
+const DEFAULT_PANEL_WIDTH = 780;
+const DEFAULT_PANEL_HEIGHT = 460;
+
 export class ResultPanel {
   private readonly host = document.createElement('div');
+  private readonly header: HTMLElement;
+  private readonly resizeHandles: HTMLElement[];
   private readonly error: HTMLParagraphElement;
   private readonly scanAgainButton: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
@@ -35,6 +71,9 @@ export class ResultPanel {
   private readonly copyTranslationStatus: HTMLSpanElement;
   private recognizedText = '';
   private translatedValue = '';
+  private currentLayout: ResultPanelLayout;
+  private interaction: PanelInteraction | null = null;
+  private layoutSaveTimer: number | null = null;
   private translationHandler:
     | ((text: string, language: TargetLanguage) => void)
     | null = null;
@@ -46,22 +85,31 @@ export class ResultPanel {
       <style>
         :host {
           all: initial;
+          box-sizing: border-box;
           position: fixed;
-          right: 16px;
-          bottom: 16px;
           z-index: 2147483647;
           display: block;
-          width: min(780px, calc(100vw - 32px));
+          min-width: min(360px, calc(100vw - 16px));
+          min-height: min(240px, calc(100vh - 16px));
+          max-width: calc(100vw - 16px);
+          max-height: calc(100vh - 16px);
           color: #0f172a;
           font: 14px/1.4 system-ui, sans-serif;
         }
 
         #panel {
+          position: relative;
+          box-sizing: border-box;
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
+          width: 100%;
+          height: 100%;
           overflow: hidden;
           border: 1px solid #cbd5e1;
           border-radius: 12px;
           background: #ffffff;
           box-shadow: 0 12px 36px rgb(15 23 42 / 28%);
+          container-type: inline-size;
         }
 
         header,
@@ -75,14 +123,25 @@ export class ResultPanel {
         header {
           justify-content: space-between;
           gap: 12px;
-          padding: 10px 14px;
+          padding: 10px 22px;
           border-bottom: 1px solid #e2e8f0;
+          cursor: grab;
           font-weight: 650;
+          touch-action: none;
+          user-select: none;
+        }
+
+        header[data-dragging='true'] {
+          cursor: grabbing;
         }
 
         #header-actions,
         .actions {
           gap: 8px;
+        }
+
+        #header-actions {
+          cursor: default;
         }
 
         #close {
@@ -123,7 +182,7 @@ export class ResultPanel {
         }
 
         #content {
-          max-height: min(580px, calc(100vh - 80px));
+          min-height: 0;
           overflow: auto;
           padding: 14px;
         }
@@ -287,7 +346,49 @@ export class ResultPanel {
           color: #b45309;
         }
 
-        @media (max-width: 620px) {
+        .resize-handle {
+          position: absolute;
+          z-index: 3;
+          box-sizing: border-box;
+          width: 16px;
+          height: 16px;
+          color: #94a3b8;
+          touch-action: none;
+        }
+
+        .resize-handle[data-direction='nw'] {
+          top: 3px;
+          left: 3px;
+          border-top: 2px solid currentColor;
+          border-left: 2px solid currentColor;
+          cursor: nwse-resize;
+        }
+
+        .resize-handle[data-direction='ne'] {
+          top: 3px;
+          right: 3px;
+          border-top: 2px solid currentColor;
+          border-right: 2px solid currentColor;
+          cursor: nesw-resize;
+        }
+
+        .resize-handle[data-direction='sw'] {
+          bottom: 3px;
+          left: 3px;
+          border-bottom: 2px solid currentColor;
+          border-left: 2px solid currentColor;
+          cursor: nesw-resize;
+        }
+
+        .resize-handle[data-direction='se'] {
+          right: 3px;
+          bottom: 3px;
+          border-right: 2px solid currentColor;
+          border-bottom: 2px solid currentColor;
+          cursor: nwse-resize;
+        }
+
+        @container (max-width: 620px) {
           #columns {
             grid-template-columns: 1fr;
           }
@@ -301,8 +402,8 @@ export class ResultPanel {
         }
       </style>
       <section id="panel" aria-label="SnipLingo result">
-        <header>
-          <span>SnipLingo — OCR &amp; Translate</span>
+        <header id="panel-header">
+          <span>SnipLingo</span>
           <div id="header-actions">
             <button id="scan-again" type="button">Scan again</button>
             <button id="close" type="button" aria-label="Close">×</button>
@@ -350,9 +451,17 @@ export class ResultPanel {
             </section>
           </div>
         </div>
+        <span class="resize-handle" data-direction="nw" aria-hidden="true"></span>
+        <span class="resize-handle" data-direction="ne" aria-hidden="true"></span>
+        <span class="resize-handle" data-direction="sw" aria-hidden="true"></span>
+        <span class="resize-handle" data-direction="se" aria-hidden="true"></span>
       </section>
     `;
 
+    this.header = shadowRoot.querySelector<HTMLElement>('#panel-header')!;
+    this.resizeHandles = Array.from(
+      shadowRoot.querySelectorAll<HTMLElement>('.resize-handle'),
+    );
     this.error = shadowRoot.querySelector<HTMLParagraphElement>('#error')!;
     this.scanAgainButton =
       shadowRoot.querySelector<HTMLButtonElement>('#scan-again')!;
@@ -396,9 +505,16 @@ export class ResultPanel {
     if (isTargetLanguage(preferredLanguage)) {
       this.targetLanguage.value = preferredLanguage;
     }
+
+    this.currentLayout = normalizePanelLayout(options.initialLayout);
+    this.applyLayout(this.currentLayout);
   }
 
   mount(): void {
+    this.header.addEventListener('pointerdown', this.handleDragStart);
+    for (const handle of this.resizeHandles) {
+      handle.addEventListener('pointerdown', this.handleResizeStart);
+    }
     this.scanAgainButton.addEventListener('click', this.handleScanAgain);
     this.closeButton.addEventListener('click', this.destroy);
     this.ocrText.addEventListener('input', this.handleOriginalInput);
@@ -409,6 +525,7 @@ export class ResultPanel {
       'click',
       this.handleCopyTranslation,
     );
+    window.addEventListener('resize', this.handleWindowResize);
     document.documentElement.append(this.host);
   }
 
@@ -508,6 +625,86 @@ export class ResultPanel {
     this.options.onScanAgain();
   };
 
+  private readonly handleDragStart = (event: PointerEvent): void => {
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      (event.target instanceof Element && event.target.closest('button') !== null)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    this.header.setPointerCapture(event.pointerId);
+    this.interaction = {
+      kind: 'drag',
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      startLayout: { ...this.currentLayout },
+    };
+    this.header.dataset.dragging = 'true';
+    this.startPointerTracking();
+  };
+
+  private readonly handleResizeStart = (event: PointerEvent): void => {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    const direction = (event.currentTarget as HTMLElement).dataset.direction;
+    if (!isResizeDirection(direction)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.interaction = {
+      direction,
+      kind: 'resize',
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      startLayout: { ...this.currentLayout },
+    };
+    this.startPointerTracking();
+  };
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    const interaction = this.interaction;
+    if (interaction === null || event.pointerId !== interaction.pointerId) return;
+
+    event.preventDefault();
+    const deltaX = event.clientX - interaction.pointerX;
+    const deltaY = event.clientY - interaction.pointerY;
+
+    if (interaction.kind === 'drag') {
+      this.applyLayout(
+        normalizePanelLayout({
+          ...interaction.startLayout,
+          x: interaction.startLayout.x + deltaX,
+          y: interaction.startLayout.y + deltaY,
+        }),
+      );
+      return;
+    }
+
+    this.applyLayout(
+      resizePanel(interaction.startLayout, interaction.direction, deltaX, deltaY),
+    );
+  };
+
+  private readonly handlePointerEnd = (event: PointerEvent): void => {
+    if (this.interaction === null || event.pointerId !== this.interaction.pointerId) {
+      return;
+    }
+
+    this.stopPointerTracking();
+    this.persistLayout();
+  };
+
+  private readonly handleWindowResize = (): void => {
+    this.applyLayout(normalizePanelLayout(this.currentLayout));
+    this.scheduleLayoutSave();
+  };
+
   private readonly handleOriginalInput = (): void => {
     this.recognizedText = this.getOriginalText();
     this.sourceLanguage.hidden = true;
@@ -597,7 +794,56 @@ export class ResultPanel {
     this.translateButton.disabled = disabled;
   }
 
+  private startPointerTracking(): void {
+    window.addEventListener('pointermove', this.handlePointerMove, {
+      passive: false,
+    });
+    window.addEventListener('pointerup', this.handlePointerEnd);
+    window.addEventListener('pointercancel', this.handlePointerEnd);
+  }
+
+  private stopPointerTracking(): void {
+    this.interaction = null;
+    delete this.header.dataset.dragging;
+    window.removeEventListener('pointermove', this.handlePointerMove);
+    window.removeEventListener('pointerup', this.handlePointerEnd);
+    window.removeEventListener('pointercancel', this.handlePointerEnd);
+  }
+
+  private applyLayout(layout: ResultPanelLayout): void {
+    this.currentLayout = layout;
+    this.host.style.left = `${layout.x}px`;
+    this.host.style.top = `${layout.y}px`;
+    this.host.style.width = `${layout.width}px`;
+    this.host.style.height = `${layout.height}px`;
+  }
+
+  private scheduleLayoutSave(): void {
+    if (this.layoutSaveTimer !== null) {
+      window.clearTimeout(this.layoutSaveTimer);
+    }
+
+    this.layoutSaveTimer = window.setTimeout(() => {
+      this.layoutSaveTimer = null;
+      this.persistLayout();
+    }, 150);
+  }
+
+  private persistLayout(): void {
+    this.options.onLayoutChange({ ...this.currentLayout });
+  }
+
   readonly destroy = (): void => {
+    if (this.layoutSaveTimer !== null) {
+      window.clearTimeout(this.layoutSaveTimer);
+      this.layoutSaveTimer = null;
+      this.persistLayout();
+    }
+    this.stopPointerTracking();
+    this.header.removeEventListener('pointerdown', this.handleDragStart);
+    for (const handle of this.resizeHandles) {
+      handle.removeEventListener('pointerdown', this.handleResizeStart);
+    }
     this.scanAgainButton.removeEventListener('click', this.handleScanAgain);
     this.closeButton.removeEventListener('click', this.destroy);
     this.ocrText.removeEventListener('input', this.handleOriginalInput);
@@ -608,8 +854,108 @@ export class ResultPanel {
       'click',
       this.handleCopyTranslation,
     );
+    window.removeEventListener('resize', this.handleWindowResize);
     this.host.remove();
   };
+}
+
+function normalizePanelLayout(
+  layout: ResultPanelLayout | undefined,
+): ResultPanelLayout {
+  const maxWidth = Math.max(1, window.innerWidth - VIEWPORT_MARGIN * 2);
+  const maxHeight = Math.max(1, window.innerHeight - VIEWPORT_MARGIN * 2);
+  const minWidth = Math.min(MIN_PANEL_WIDTH, maxWidth);
+  const minHeight = Math.min(MIN_PANEL_HEIGHT, maxHeight);
+  const width = clamp(
+    layout?.width ?? DEFAULT_PANEL_WIDTH,
+    minWidth,
+    maxWidth,
+  );
+  const height = clamp(
+    layout?.height ?? DEFAULT_PANEL_HEIGHT,
+    minHeight,
+    maxHeight,
+  );
+  const defaultX = window.innerWidth - VIEWPORT_MARGIN - width;
+  const defaultY = window.innerHeight - VIEWPORT_MARGIN - height;
+
+  return {
+    width,
+    height,
+    x: clamp(
+      layout?.x ?? defaultX,
+      VIEWPORT_MARGIN,
+      Math.max(VIEWPORT_MARGIN, window.innerWidth - VIEWPORT_MARGIN - width),
+    ),
+    y: clamp(
+      layout?.y ?? defaultY,
+      VIEWPORT_MARGIN,
+      Math.max(VIEWPORT_MARGIN, window.innerHeight - VIEWPORT_MARGIN - height),
+    ),
+  };
+}
+
+function resizePanel(
+  layout: ResultPanelLayout,
+  direction: ResizeDirection,
+  deltaX: number,
+  deltaY: number,
+): ResultPanelLayout {
+  const minWidth = Math.min(
+    MIN_PANEL_WIDTH,
+    window.innerWidth - VIEWPORT_MARGIN * 2,
+  );
+  const minHeight = Math.min(
+    MIN_PANEL_HEIGHT,
+    window.innerHeight - VIEWPORT_MARGIN * 2,
+  );
+  let left = layout.x;
+  let right = layout.x + layout.width;
+  let top = layout.y;
+  let bottom = layout.y + layout.height;
+
+  if (direction.includes('w')) {
+    left = clamp(
+      layout.x + deltaX,
+      VIEWPORT_MARGIN,
+      right - minWidth,
+    );
+  } else {
+    right = clamp(
+      right + deltaX,
+      left + minWidth,
+      window.innerWidth - VIEWPORT_MARGIN,
+    );
+  }
+
+  if (direction.includes('n')) {
+    top = clamp(
+      layout.y + deltaY,
+      VIEWPORT_MARGIN,
+      bottom - minHeight,
+    );
+  } else {
+    bottom = clamp(
+      bottom + deltaY,
+      top + minHeight,
+      window.innerHeight - VIEWPORT_MARGIN,
+    );
+  }
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function isResizeDirection(value: string | undefined): value is ResizeDirection {
+  return value === 'ne' || value === 'nw' || value === 'se' || value === 'sw';
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
 function getBaseLanguage(language: string): string {

@@ -1,4 +1,7 @@
-import { ResultPanel } from '@/components/ResultPanel';
+import {
+  ResultPanel,
+  type ResultPanelLayout,
+} from '@/components/ResultPanel';
 import { SelectionOverlay } from '@/components/SelectionOverlay';
 import {
   RECOGNIZE_IMAGE_MESSAGE,
@@ -22,17 +25,24 @@ import {
 } from '@/types/translation';
 
 export default defineContentScript({
-  matches: ['<all_urls>'],
+  registration: 'runtime',
+  matches: [],
   main() {
     let overlay: SelectionOverlay | null = null;
     let resultPanel: ResultPanel | null = null;
     let operationId = 0;
     let activeOcrRequestId: string | null = null;
     let activeTranslationRequestId: string | null = null;
+    let preferredPanelLayout: ResultPanelLayout | undefined;
     let preferredTargetLanguage: TargetLanguage | undefined;
 
     void loadPreferredTargetLanguage().then((language) => {
       preferredTargetLanguage = language;
+    });
+    void loadPreferredPanelLayout().then((layout) => {
+      if (preferredPanelLayout === undefined) {
+        preferredPanelLayout = layout;
+      }
     });
 
     browser.runtime.onMessage.addListener((message: unknown) => {
@@ -46,6 +56,8 @@ export default defineContentScript({
       if (!isStartSelectionMessage(message)) return;
       startSelection();
     });
+
+    startSelection();
 
     function startSelection(): void {
       operationId += 1;
@@ -71,7 +83,16 @@ export default defineContentScript({
 
     function createResultPanel(): ResultPanel {
       const panel = new ResultPanel({
+        initialLayout: preferredPanelLayout,
         initialTargetLanguage: preferredTargetLanguage,
+        onLayoutChange: (layout) => {
+          preferredPanelLayout = layout;
+          void browser.storage.local
+            .set({ [PANEL_LAYOUT_STORAGE_KEY]: layout })
+            .catch((error) => {
+              console.error('SnipLingo could not save panel layout:', error);
+            });
+        },
         onScanAgain: startSelection,
         onTargetLanguageChange: (language) => {
           preferredTargetLanguage = language;
@@ -239,6 +260,7 @@ export default defineContentScript({
 });
 
 const TARGET_LANGUAGE_STORAGE_KEY = 'targetLanguage';
+const PANEL_LAYOUT_STORAGE_KEY = 'resultPanelLayout';
 
 async function loadPreferredTargetLanguage(): Promise<
   TargetLanguage | undefined
@@ -251,6 +273,40 @@ async function loadPreferredTargetLanguage(): Promise<
     console.error('SnipLingo could not load target language:', error);
     return undefined;
   }
+}
+
+async function loadPreferredPanelLayout(): Promise<
+  ResultPanelLayout | undefined
+> {
+  try {
+    const stored = await browser.storage.local.get(PANEL_LAYOUT_STORAGE_KEY);
+    const layout = stored[PANEL_LAYOUT_STORAGE_KEY];
+    return isResultPanelLayout(layout) ? layout : undefined;
+  } catch (error) {
+    console.error('SnipLingo could not load panel layout:', error);
+    return undefined;
+  }
+}
+
+function isResultPanelLayout(value: unknown): value is ResultPanelLayout {
+  if (typeof value !== 'object' || value === null) return false;
+
+  return (
+    'x' in value &&
+    isFiniteNumber(value.x) &&
+    'y' in value &&
+    isFiniteNumber(value.y) &&
+    'width' in value &&
+    isFiniteNumber(value.width) &&
+    value.width > 0 &&
+    'height' in value &&
+    isFiniteNumber(value.height) &&
+    value.height > 0
+  );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function waitForOverlayRemoval(): Promise<void> {
