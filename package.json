@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wxt",
     "dev:backend": "node --env-file=.env backend/server.mjs",
+    "start:backend": "NODE_ENV=production node backend/server.mjs",
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",

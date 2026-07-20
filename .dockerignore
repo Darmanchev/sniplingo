@@ -1,0 +1,7 @@
+.env*
+.git
+.output
+.wxt
+coverage
+node_modules
+tests

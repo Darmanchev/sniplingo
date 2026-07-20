@@ -5,7 +5,9 @@ import type {
 
 const TRANSLATION_API_URL =
   import.meta.env.WXT_TRANSLATION_API_URL ??
-  'http://127.0.0.1:8787/v1/translate';
+  (import.meta.env.DEV
+    ? 'http://127.0.0.1:8787/v1/translate'
+    : undefined);
 const REQUEST_TIMEOUT_MS = 25_000;
 
 interface TranslationApiResponse {
@@ -18,6 +20,10 @@ export async function translateText(
   text: string,
   targetLanguage: TargetLanguage,
 ): Promise<TranslationResult> {
+  if (!TRANSLATION_API_URL) {
+    throw new Error('Translation API URL is not configured.');
+  }
+
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), REQUEST_TIMEOUT_MS);
 
