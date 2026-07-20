@@ -120,11 +120,11 @@ async function translateRecognizedText(
   message: TranslateTextMessage,
 ): Promise<TranslateTextResponse> {
   try {
-    const translatedText = await translateText(
+    const result = await translateText(
       message.text,
       message.targetLanguage,
     );
-    return { ok: true, translatedText };
+    return { ok: true, ...result };
   } catch (error) {
     console.error('SnipLingo translation failed:', error);
     return { ok: false, error: getErrorMessage(error, 'Translation failed.') };

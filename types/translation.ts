@@ -17,8 +17,13 @@ export interface TranslateTextMessage {
   text: string;
 }
 
+export interface TranslationResult {
+  detectedSourceLanguage: string;
+  translatedText: string;
+}
+
 export type TranslateTextResponse =
-  | { ok: true; translatedText: string }
+  | ({ ok: true } & TranslationResult)
   | { ok: false; error: string };
 
 export function isTranslateTextMessage(

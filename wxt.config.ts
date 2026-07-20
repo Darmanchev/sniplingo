@@ -8,6 +8,7 @@ export default defineConfig({
     permissions: [
       'activeTab',
       'clipboardWrite',
+      'storage',
       'http://127.0.0.1:8787/*',
     ],
   },

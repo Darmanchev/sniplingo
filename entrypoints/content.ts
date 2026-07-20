@@ -15,6 +15,7 @@ import {
 } from '@/types/selection';
 import {
   TRANSLATE_TEXT_MESSAGE,
+  isTargetLanguage,
   type TargetLanguage,
   type TranslateTextMessage,
   type TranslateTextResponse,
@@ -28,6 +29,11 @@ export default defineContentScript({
     let operationId = 0;
     let activeOcrRequestId: string | null = null;
     let activeTranslationRequestId: string | null = null;
+    let preferredTargetLanguage: TargetLanguage | undefined;
+
+    void loadPreferredTargetLanguage().then((language) => {
+      preferredTargetLanguage = language;
+    });
 
     browser.runtime.onMessage.addListener((message: unknown) => {
       if (isOcrProgressMessage(message)) {
@@ -38,7 +44,10 @@ export default defineContentScript({
       }
 
       if (!isStartSelectionMessage(message)) return;
+      startSelection();
+    });
 
+    function startSelection(): void {
       operationId += 1;
       activeOcrRequestId = null;
       activeTranslationRequestId = null;
@@ -58,7 +67,24 @@ export default defineContentScript({
         },
       });
       overlay.mount();
-    });
+    }
+
+    function createResultPanel(): ResultPanel {
+      const panel = new ResultPanel({
+        initialTargetLanguage: preferredTargetLanguage,
+        onScanAgain: startSelection,
+        onTargetLanguageChange: (language) => {
+          preferredTargetLanguage = language;
+          void browser.storage.local
+            .set({ [TARGET_LANGUAGE_STORAGE_KEY]: language })
+            .catch((error) => {
+              console.error('SnipLingo could not save target language:', error);
+            });
+        },
+      });
+      panel.mount();
+      return panel;
+    }
 
     async function captureAndShow(
       rect: SelectionRect,
@@ -83,8 +109,7 @@ export default defineContentScript({
         if (completedOperationId !== operationId) return;
 
         resultPanel?.destroy();
-        resultPanel = new ResultPanel();
-        resultPanel.mount();
+        resultPanel = createResultPanel();
 
         if (response.ok) {
           const panel = resultPanel;
@@ -96,8 +121,7 @@ export default defineContentScript({
         if (completedOperationId !== operationId) return;
 
         resultPanel?.destroy();
-        resultPanel = new ResultPanel();
-        resultPanel.mount();
+        resultPanel = createResultPanel();
         resultPanel.showError(getErrorMessage(error));
       }
     }
@@ -131,9 +155,9 @@ export default defineContentScript({
 
         if (response.ok) {
           panel.showOcrResult(response.text);
-          panel.enableTranslation((targetLanguage) => {
+          panel.enableTranslation((text, targetLanguage) => {
             void runTranslation(
-              response.text,
+              text,
               targetLanguage,
               panel,
               completedOperationId,
@@ -179,18 +203,26 @@ export default defineContentScript({
         if (
           completedOperationId !== operationId ||
           resultPanel !== panel ||
-          activeTranslationRequestId !== requestId
+          activeTranslationRequestId !== requestId ||
+          panel.getOriginalText() !== text.trim()
         ) {
           return;
         }
 
         if (response.ok) {
-          panel.showTranslationResult(response.translatedText);
+          panel.showTranslationResult(
+            response.translatedText,
+            response.detectedSourceLanguage,
+          );
         } else {
           panel.showTranslationError(response.error);
         }
       } catch (error) {
-        if (completedOperationId !== operationId || resultPanel !== panel) {
+        if (
+          completedOperationId !== operationId ||
+          resultPanel !== panel ||
+          panel.getOriginalText() !== text.trim()
+        ) {
           return;
         }
 
@@ -205,6 +237,21 @@ export default defineContentScript({
     }
   },
 });
+
+const TARGET_LANGUAGE_STORAGE_KEY = 'targetLanguage';
+
+async function loadPreferredTargetLanguage(): Promise<
+  TargetLanguage | undefined
+> {
+  try {
+    const stored = await browser.storage.local.get(TARGET_LANGUAGE_STORAGE_KEY);
+    const language = stored[TARGET_LANGUAGE_STORAGE_KEY];
+    return isTargetLanguage(language) ? language : undefined;
+  } catch (error) {
+    console.error('SnipLingo could not load target language:', error);
+    return undefined;
+  }
+}
 
 function waitForOverlayRemoval(): Promise<void> {
   return new Promise((resolve) => {

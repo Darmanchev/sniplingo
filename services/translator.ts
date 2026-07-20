@@ -1,4 +1,7 @@
-import type { TargetLanguage } from '@/types/translation';
+import type {
+  TargetLanguage,
+  TranslationResult,
+} from '@/types/translation';
 
 const TRANSLATION_API_URL =
   import.meta.env.WXT_TRANSLATION_API_URL ??
@@ -6,6 +9,7 @@ const TRANSLATION_API_URL =
 const REQUEST_TIMEOUT_MS = 25_000;
 
 interface TranslationApiResponse {
+  detectedSourceLanguage?: unknown;
   error?: unknown;
   translatedText?: unknown;
 }
@@ -13,7 +17,7 @@ interface TranslationApiResponse {
 export async function translateText(
   text: string,
   targetLanguage: TargetLanguage,
-): Promise<string> {
+): Promise<TranslationResult> {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), REQUEST_TIMEOUT_MS);
 
@@ -34,11 +38,17 @@ export async function translateText(
       throw new Error(readApiError(payload, response.status));
     }
 
-    if (typeof payload?.translatedText !== 'string') {
+    if (
+      typeof payload?.translatedText !== 'string' ||
+      typeof payload.detectedSourceLanguage !== 'string'
+    ) {
       throw new Error('Translation backend returned an invalid response.');
     }
 
-    return payload.translatedText;
+    return {
+      detectedSourceLanguage: payload.detectedSourceLanguage,
+      translatedText: payload.translatedText,
+    };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('Translation request timed out.');
