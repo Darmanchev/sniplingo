@@ -1,4 +1,5 @@
 import { createWorker, OEM } from 'tesseract.js';
+import { preprocessImageForOcr } from '@/services/imagePreprocess';
 
 export interface OcrProgress {
   progress: number;
@@ -18,8 +19,13 @@ export class OcrService {
     this.progressListener = onProgress ?? null;
 
     try {
+      this.progressListener?.({
+        progress: 0,
+        status: 'preprocessing image',
+      });
+      const preprocessedImage = await preprocessImageForOcr(image);
       const worker = await this.getWorker();
-      const result = await worker.recognize(image);
+      const result = await worker.recognize(preprocessedImage);
       return sanitizeOcrText(result.data.text);
     } finally {
       this.progressListener = null;
