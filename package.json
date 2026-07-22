@@ -2,7 +2,7 @@
   "name": "sniplingo",
   "description": "Select a page area, recognize its text, and translate it.",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",
