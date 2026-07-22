@@ -370,32 +370,24 @@ export class ResultPanel {
         .resize-handle[data-direction='nw'] {
           top: 3px;
           left: 3px;
-          border-top: 2px solid currentColor;
-          border-left: 2px solid currentColor;
           cursor: nwse-resize;
         }
 
         .resize-handle[data-direction='ne'] {
           top: 3px;
           right: 3px;
-          border-top: 2px solid currentColor;
-          border-right: 2px solid currentColor;
           cursor: nesw-resize;
         }
 
         .resize-handle[data-direction='sw'] {
           bottom: 3px;
           left: 3px;
-          border-bottom: 2px solid currentColor;
-          border-left: 2px solid currentColor;
           cursor: nesw-resize;
         }
 
         .resize-handle[data-direction='se'] {
           right: 3px;
           bottom: 3px;
-          border-right: 2px solid currentColor;
-          border-bottom: 2px solid currentColor;
           cursor: nwse-resize;
         }
 

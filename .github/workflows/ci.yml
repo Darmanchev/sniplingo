@@ -15,8 +15,8 @@ jobs:
     env:
       WXT_TRANSLATION_API_URL: https://sniplingo-ci.invalid/v1/translate
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -28,18 +28,19 @@ jobs:
       - run: npm run check:firefox-manifest
       - run: npm run lint:firefox
       - run: npm run zip:firefox
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firefox-unsigned
           path: .output/*firefox*.zip
+          include-hidden-files: true
           if-no-files-found: error
 
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
