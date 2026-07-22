@@ -15,7 +15,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "check:firefox-manifest": "node scripts/check-firefox-manifest.mjs",
-    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv2 --warnings-as-errors",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv2 --ignore-files tesseract/worker.min.js --warnings-as-errors",
     "sign:firefox": "web-ext sign --source-dir .output/firefox-mv2 --artifacts-dir .output/signed --channel=unlisted",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",

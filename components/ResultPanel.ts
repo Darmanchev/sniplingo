@@ -3,6 +3,7 @@ import {
   isTargetLanguage,
   type TargetLanguage,
 } from '@/types/translation';
+import { appendStaticMarkup } from '@/components/staticMarkup';
 
 export interface ResultPanelLayout {
   height: number;
@@ -84,7 +85,7 @@ export class ResultPanel {
       mode: import.meta.env.MODE === 'e2e' ? 'open' : 'closed',
     });
 
-    shadowRoot.innerHTML = `
+    appendStaticMarkup(shadowRoot, `
       <style>
         :host {
           all: initial;
@@ -467,7 +468,7 @@ export class ResultPanel {
         <span class="resize-handle" data-direction="sw" aria-hidden="true"></span>
         <span class="resize-handle" data-direction="se" aria-hidden="true"></span>
       </section>
-    `;
+    `);
 
     this.header = shadowRoot.querySelector<HTMLElement>('#panel-header')!;
     this.resizeHandles = Array.from(

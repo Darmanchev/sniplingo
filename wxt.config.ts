@@ -1,15 +1,28 @@
 import { defineConfig } from 'wxt';
+import { fileURLToPath } from 'node:url';
 
 const DEVELOPMENT_API_URL = 'http://127.0.0.1:8787/v1/translate';
 const PREPARE_API_URL = 'https://sniplingo-build.invalid/v1/translate';
 
 export default defineConfig({
+  vite: () => ({
+    resolve: {
+      alias: {
+        'regenerator-runtime/runtime': fileURLToPath(
+          new URL('./services/regeneratorRuntimeShim.ts', import.meta.url),
+        ),
+      },
+    },
+  }),
   manifest: ({ browser, mode, manifestVersion }) => {
     const apiUrl = readApiUrl(mode);
     const hostPermission = `${apiUrl.origin}/*`;
     const hostPermissions = [
       hostPermission,
-      ...(mode === 'e2e' ? ['http://127.0.0.1:4173/*'] : []),
+      // Playwright starts selection by messaging the service worker directly,
+      // which does not grant activeTab like a real action click or command does.
+      // Keep the broader capture permission isolated to the E2E package.
+      ...(mode === 'e2e' ? ['<all_urls>'] : []),
     ];
     const permissions = [
       'activeTab',
@@ -17,6 +30,7 @@ export default defineConfig({
       'notifications',
       'scripting',
       'storage',
+      ...(manifestVersion === 3 ? ['offscreen'] : []),
     ];
 
     const actionCommand =
@@ -31,7 +45,13 @@ export default defineConfig({
           ? [...permissions, ...hostPermissions]
           : permissions,
       ...(manifestVersion === 3
-        ? { host_permissions: hostPermissions }
+        ? {
+            host_permissions: hostPermissions,
+            content_security_policy: {
+              extension_pages:
+                "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+            },
+          }
         : {}),
       commands: {
         [actionCommand]: {

@@ -1,4 +1,5 @@
 export const RECOGNIZE_IMAGE_MESSAGE = 'RECOGNIZE_IMAGE' as const;
+export const OFFSCREEN_OCR_MESSAGE = 'OFFSCREEN_OCR' as const;
 export const OCR_PROGRESS_MESSAGE = 'OCR_PROGRESS' as const;
 
 export interface RecognizeImageMessage {
@@ -14,6 +15,12 @@ export interface OcrProgressMessage {
   status: string;
 }
 
+export interface OffscreenOcrMessage
+  extends Omit<RecognizeImageMessage, 'type'> {
+  type: typeof OFFSCREEN_OCR_MESSAGE;
+  target: 'offscreen';
+}
+
 export type RecognizeImageResponse =
   | { ok: true; text: string }
   | { ok: false; error: string };
@@ -26,6 +33,25 @@ export function isRecognizeImageMessage(
     message !== null &&
     'type' in message &&
     message.type === RECOGNIZE_IMAGE_MESSAGE &&
+    'requestId' in message &&
+    typeof message.requestId === 'string' &&
+    message.requestId.trim().length > 0 &&
+    'imageDataUrl' in message &&
+    typeof message.imageDataUrl === 'string' &&
+    isSupportedImageDataUrl(message.imageDataUrl)
+  );
+}
+
+export function isOffscreenOcrMessage(
+  message: unknown,
+): message is OffscreenOcrMessage {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    message.type === OFFSCREEN_OCR_MESSAGE &&
+    'target' in message &&
+    message.target === 'offscreen' &&
     'requestId' in message &&
     typeof message.requestId === 'string' &&
     message.requestId.trim().length > 0 &&

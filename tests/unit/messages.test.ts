@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OFFSCREEN_OCR_MESSAGE,
   OCR_PROGRESS_MESSAGE,
   RECOGNIZE_IMAGE_MESSAGE,
+  isOffscreenOcrMessage,
   isOcrProgressMessage,
   isRecognizeImageMessage,
 } from '@/types/ocr';
@@ -58,10 +60,24 @@ describe('OCR message guards', () => {
     progress: 0.5,
     status: 'recognizing text',
   };
+  const validOffscreenRecognition = {
+    ...validRecognition,
+    type: OFFSCREEN_OCR_MESSAGE,
+    target: 'offscreen',
+  };
 
   it('accepts valid OCR messages', () => {
     expect(isRecognizeImageMessage(validRecognition)).toBe(true);
+    expect(isOffscreenOcrMessage(validOffscreenRecognition)).toBe(true);
     expect(isOcrProgressMessage(validProgress)).toBe(true);
+  });
+
+  it.each([
+    { ...validOffscreenRecognition, target: 'background' },
+    { ...validOffscreenRecognition, requestId: '' },
+    { ...validOffscreenRecognition, imageDataUrl: 'not-an-image' },
+  ])('rejects an invalid offscreen OCR message', (message) => {
+    expect(isOffscreenOcrMessage(message)).toBe(false);
   });
 
   it.each([

@@ -1,0 +1,25 @@
+services:
+  translation-api:
+    build:
+      context: .
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${SNIPLINGO_ENV_FILE:-.env.production}
+    ports:
+      - '127.0.0.1:8787:8787'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

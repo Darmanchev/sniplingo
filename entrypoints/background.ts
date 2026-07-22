@@ -1,10 +1,12 @@
 import { cropImage } from '@/services/imageCrop';
-import { OcrService } from '@/services/ocr';
 import { captureVisibleTab } from '@/services/screenshot';
 import { translateText } from '@/services/translator';
+import type { PublicPath } from 'wxt/browser';
 import {
+  OFFSCREEN_OCR_MESSAGE,
   OCR_PROGRESS_MESSAGE,
   isRecognizeImageMessage,
+  type OffscreenOcrMessage,
   type OcrProgressMessage,
   type RecognizeImageMessage,
   type RecognizeImageResponse,
@@ -23,7 +25,6 @@ import {
 } from '@/types/translation';
 
 export default defineBackground(() => {
-  const ocrService = new OcrService();
   const extensionAction = browser.action ?? browser.browserAction;
 
   extensionAction.onClicked.addListener(async (tab) => {
@@ -63,7 +64,7 @@ export default defineBackground(() => {
     }
 
     if (isRecognizeImageMessage(message)) {
-      return recognizeImage(message, sender.tab?.id, ocrService);
+      return recognizeImage(message, sender.tab?.id);
     }
 
     if (isTranslateTextMessage(message)) {
@@ -170,9 +171,22 @@ function getErrorMessage(error: unknown, fallback = 'The screenshot failed.'): s
 async function recognizeImage(
   message: RecognizeImageMessage,
   tabId: number | undefined,
-  ocrService: OcrService,
 ): Promise<RecognizeImageResponse> {
   try {
+    if (isOffscreenOcrAvailable()) {
+      await ensureOffscreenDocument();
+      const offscreenMessage: OffscreenOcrMessage = {
+        type: OFFSCREEN_OCR_MESSAGE,
+        target: 'offscreen',
+        requestId: message.requestId,
+        imageDataUrl: message.imageDataUrl,
+      };
+      return (await browser.runtime.sendMessage(
+        offscreenMessage,
+      )) as RecognizeImageResponse;
+    }
+
+    const ocrService = await getBackgroundOcrService();
     const text = await ocrService.recognize(
       message.imageDataUrl,
       ({ progress, status }) => {
@@ -194,6 +208,111 @@ async function recognizeImage(
     console.error('SnipLingo OCR failed:', error);
     return { ok: false, error: getErrorMessage(error, 'OCR failed.') };
   }
+}
+
+let backgroundOcrServicePromise:
+  | Promise<import('@/services/ocr').OcrService>
+  | null = null;
+
+function getBackgroundOcrService(): Promise<
+  import('@/services/ocr').OcrService
+> {
+  if (backgroundOcrServicePromise === null) {
+    backgroundOcrServicePromise = import('@/services/ocr').then(
+      ({ OcrService }) => new OcrService(),
+    );
+  }
+  return backgroundOcrServicePromise;
+}
+
+function isOffscreenOcrAvailable(): boolean {
+  return (
+    browser.runtime.getManifest().manifest_version === 3 &&
+    'offscreen' in browser
+  );
+}
+
+const OFFSCREEN_DOCUMENT_PATH = '/offscreen.html';
+let creatingOffscreenDocument: Promise<void> | null = null;
+
+async function ensureOffscreenDocument(): Promise<void> {
+  const documentUrl = browser.runtime.getURL(
+    OFFSCREEN_DOCUMENT_PATH as PublicPath,
+  );
+  const runtimeWithContexts = browser.runtime as typeof browser.runtime & {
+    getContexts?: (filter: {
+      contextTypes: string[];
+      documentUrls: string[];
+    }) => Promise<unknown[]>;
+  };
+
+  const existingContexts = runtimeWithContexts.getContexts
+    ? await runtimeWithContexts.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT'],
+        documentUrls: [documentUrl],
+      })
+    : await findOffscreenDocumentClients(documentUrl);
+
+  if (existingContexts.length > 0) {
+    await waitForOffscreenDocument();
+    return;
+  }
+  if (creatingOffscreenDocument !== null) {
+    await creatingOffscreenDocument;
+    await waitForOffscreenDocument();
+    return;
+  }
+
+  const offscreenApi = (
+    browser as typeof browser & {
+      offscreen: {
+        createDocument(options: {
+          url: string;
+          reasons: string[];
+          justification: string;
+        }): Promise<void>;
+      };
+    }
+  ).offscreen;
+
+  creatingOffscreenDocument = offscreenApi.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: ['WORKERS'],
+    justification: 'Run packaged Tesseract OCR in a local Web Worker.',
+  });
+
+  try {
+    await creatingOffscreenDocument;
+    await waitForOffscreenDocument();
+  } finally {
+    creatingOffscreenDocument = null;
+  }
+}
+
+async function waitForOffscreenDocument(): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: 'OFFSCREEN_PING',
+        target: 'offscreen',
+      })) as { ready?: unknown } | undefined;
+      if (response?.ready === true) return;
+    } catch {
+      // The HTML page can exist briefly before its module listener is ready.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('The local OCR document did not start.');
+}
+
+async function findOffscreenDocumentClients(
+  documentUrl: string,
+): Promise<Array<{ url: string }>> {
+  const workerGlobal = globalThis as typeof globalThis & {
+    clients?: { matchAll(): Promise<Array<{ url: string }>> };
+  };
+  const clients = await workerGlobal.clients?.matchAll();
+  return clients?.filter((client) => client.url === documentUrl) ?? [];
 }
 
 async function translateRecognizedText(

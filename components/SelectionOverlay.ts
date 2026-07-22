@@ -1,4 +1,5 @@
 import type { SelectionRect } from '@/types/selection';
+import { appendStaticMarkup } from '@/components/staticMarkup';
 
 interface SelectionOverlayOptions {
   onCancel: () => void;
@@ -25,7 +26,7 @@ export class SelectionOverlay {
     this.host.dataset.sniplingo = 'selection-overlay';
     const shadowRoot = this.host.attachShadow({ mode: 'closed' });
 
-    shadowRoot.innerHTML = `
+    appendStaticMarkup(shadowRoot, `
       <style>
         :host {
           all: initial;
@@ -88,7 +89,7 @@ export class SelectionOverlay {
         <div id="selection"></div>
         <div id="instruction">Drag to select an area · Esc to cancel</div>
       </div>
-    `;
+    `);
 
     this.root = shadowRoot.querySelector<HTMLDivElement>('#root')!;
     this.selection = shadowRoot.querySelector<HTMLDivElement>('#selection')!;

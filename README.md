@@ -94,10 +94,10 @@ Firefox 140 or newer is required so the built-in data-consent prompt is always
 available. Validate the generated package before release:
 
 ```bash
-WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run build:firefox
-WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run check:firefox-manifest
+WXT_TRANSLATION_API_URL=https://api.your-domain.com/v1/translate npm run build:firefox
+WXT_TRANSLATION_API_URL=https://api.your-domain.com/v1/translate npm run check:firefox-manifest
 npm run lint:firefox
-WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run zip:firefox
+WXT_TRANSLATION_API_URL=https://api.your-domain.com/v1/translate npm run zip:firefox
 ```
 
 To request an AMO Unlisted signature, create AMO API credentials and export
@@ -110,12 +110,13 @@ The signed XPI is written to `.output/signed`.
 - [TypeScript](https://www.typescriptlang.org/) - Typed JavaScript.
 - [Tesseract.js](https://tesseract.projectnaptha.com/) - Pure Javascript OCR.
 
-## Production backend
+## Production backend on Contabo
 
-The backend has no runtime npm dependencies and can be deployed with the
-included `Dockerfile` or with `npm run start:backend`. Terminate TLS at the
-managed platform or reverse proxy and route the public HTTPS endpoint to port
-`8787`. Configure the platform health check as `GET /health`.
+The backend has no runtime npm dependencies. The included `compose.yaml` runs
+it as a read-only, automatically restarting container and exposes it only on
+`127.0.0.1:8787`. A reverse proxy on the VPS must terminate TLS and forward the
+public HTTPS endpoint to that address. `deploy/Caddyfile.example` contains a
+minimal Caddy configuration; replace its placeholder domain first.
 
 Required production variables:
 
@@ -130,12 +131,23 @@ LOG_REQUEST_METRICS=false
 GLOBAL_DAILY_CHARACTER_LIMIT=250000
 ```
 
-`render.yaml` defines a single-instance Render deployment in Frankfurt with a
-managed `onrender.com` HTTPS subdomain. Create a Render Blueprint from this
-repository, enter `DEEPL_API_KEY` when prompted, and use the resulting service
-URL as `WXT_TRANSLATION_API_URL`. A free instance can take about a minute to
-wake after 15 minutes without traffic; use a paid always-on instance before
-public distribution if that delay is unacceptable.
+Prepare and start the backend on the VPS:
+
+```bash
+cp .env.production.example .env.production
+# Fill in DEEPL_API_KEY, ALLOWED_CHROME_EXTENSION_IDS, and your API domain.
+docker compose --env-file .env.production up -d --build
+docker compose ps
+curl https://api.your-domain.com/health
+```
+
+The firewall should expose only SSH, HTTP, and HTTPS. Port `8787` remains bound
+to localhost and must not be opened publicly. Build the browser packages only
+after the HTTPS endpoint works, using the same domain in
+`WXT_TRANSLATION_API_URL`.
+
+`render.yaml` remains available as an alternative managed deployment and is
+not used by the Contabo setup.
 
 Only enable `TRUST_PROXY` when the platform overwrites `X-Forwarded-For` and
 does not pass a client-supplied value through. Do not put `DEEPL_API_KEY` in any
@@ -186,3 +198,8 @@ Crop unit tests cover 80%, 100%, 125%, 150%, 200%, independent axes, and 2×
 HiDPI screenshots. Multi-monitor behavior still requires a manual Firefox test
 because browser automation cannot move a Firefox window between physical
 displays in CI.
+
+Strict `web-ext lint` ignores only the packaged Tesseract worker, whose upstream
+compatibility fallbacks trigger known static-analysis warnings. No remote code
+is loaded; the OCR worker, WebAssembly core, and language models are shipped in
+the extension. Review the vendored worker again whenever Tesseract is updated.
