@@ -88,6 +88,22 @@ npm run zip
 npm run zip:firefox
 ```
 
+The Firefox package is version `0.1.0`, uses the stable extension ID
+`sniplingo@darmanchev`, and declares required `websiteContent` transmission.
+Firefox 140 or newer is required so the built-in data-consent prompt is always
+available. Validate the generated package before release:
+
+```bash
+WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run build:firefox
+WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run check:firefox-manifest
+npm run lint:firefox
+WXT_TRANSLATION_API_URL=https://your-service.onrender.com/v1/translate npm run zip:firefox
+```
+
+To request an AMO Unlisted signature, create AMO API credentials and export
+`WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`, then run `npm run sign:firefox`.
+The signed XPI is written to `.output/signed`.
+
 ## Technologies Used
 
 - [WXT](https://wxt.dev/) - Next-gen framework for browser extensions.
@@ -110,7 +126,16 @@ TRANSLATION_SERVER_HOST=0.0.0.0
 TRANSLATION_SERVER_PORT=8787
 ALLOWED_CHROME_EXTENSION_IDS=published-chrome-extension-id
 TRUST_PROXY=true
+LOG_REQUEST_METRICS=false
+GLOBAL_DAILY_CHARACTER_LIMIT=250000
 ```
+
+`render.yaml` defines a single-instance Render deployment in Frankfurt with a
+managed `onrender.com` HTTPS subdomain. Create a Render Blueprint from this
+repository, enter `DEEPL_API_KEY` when prompted, and use the resulting service
+URL as `WXT_TRANSLATION_API_URL`. A free instance can take about a minute to
+wake after 15 minutes without traffic; use a paid always-on instance before
+public distribution if that delay is unacceptable.
 
 Only enable `TRUST_PROXY` when the platform overwrites `X-Forwarded-For` and
 does not pass a client-supplied value through. Do not put `DEEPL_API_KEY` in any
@@ -120,6 +145,8 @@ Default protection:
 
 - 32 KiB JSON request-body limit and 10,000 Unicode code points per text;
 - 20 requests per minute and 40,000 characters per 24-hour window per IP;
+- a 250,000-character global 24-hour budget, in addition to DeepL's provider
+  quota guard;
 - in-memory entries removed by TTL timers; use Redis or another shared store
   before running more than one backend instance;
 - DeepL `/usage` refresh every five minutes, local character accounting, and
@@ -128,7 +155,34 @@ Default protection:
 - extension-origin filtering. Firefox UUID origins are necessarily dynamic;
   this filter, like CORS, is not authentication.
 
-Application logs contain request ID, status, duration, character count, target
-language, and error type only. Configure the reverse proxy, hosting platform,
-APM, and error monitoring not to capture request/response bodies,
-`Authorization` headers, or environment variables.
+Per-request application logs are disabled by default. `LOG_USAGE_METRICS=true`
+emits aggregate daily character totals only. If `LOG_REQUEST_METRICS=true` is
+explicitly enabled, logs contain request ID, status, duration, character count,
+target language, and error type, but never request or response text. Exact
+addresses in `BLOCKED_CLIENT_ADDRESSES` are rejected without logging translated
+text. Configure the reverse proxy, hosting platform, APM, and error monitoring
+not to capture request/response bodies, `Authorization` headers, or environment
+variables.
+
+The in-memory rate limits are intentionally single-instance. Before scaling to
+multiple backend replicas, replace them with atomic Redis counters with TTLs;
+otherwise each replica enforces a separate budget. CORS and Origin checks are
+not authentication and do not prevent scripted abuse.
+
+See [PRIVACY.md](./PRIVACY.md) for the release privacy policy.
+
+## Verification
+
+```bash
+npm run compile
+npm test
+npm run test:ocr
+npm run test:e2e
+```
+
+The browser E2E opens a real Chromium extension, selects rendered text,
+captures it, runs packaged local OCR, and translates through a local mock API.
+Crop unit tests cover 80%, 100%, 125%, 150%, 200%, independent axes, and 2×
+HiDPI screenshots. Multi-monitor behavior still requires a manual Firefox test
+because browser automation cannot move a Firefox window between physical
+displays in CI.

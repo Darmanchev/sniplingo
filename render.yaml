@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: sniplingo-translate-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    renderSubdomainPolicy: enabled
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: TRANSLATION_SERVER_HOST
+        value: 0.0.0.0
+      - key: TRANSLATION_SERVER_PORT
+        value: 8787
+      - key: TRUST_PROXY
+        value: true
+      - key: LOG_REQUEST_METRICS
+        value: false
+      - key: LOG_USAGE_METRICS
+        value: true
+      - key: RATE_LIMIT_REQUESTS
+        value: 20
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: DAILY_CHARACTER_LIMIT
+        value: 40000
+      - key: GLOBAL_DAILY_CHARACTER_LIMIT
+        value: 250000
+      - key: DEEPL_QUOTA_STOP_RATIO
+        value: 0.95

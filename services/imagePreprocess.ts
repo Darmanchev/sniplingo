@@ -11,6 +11,10 @@ export interface ImageSize {
 export async function preprocessImageForOcr(
   imageDataUrl: string,
 ): Promise<string> {
+  if (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined') {
+    return preprocessImageOffscreen(imageDataUrl);
+  }
+
   const image = await loadImage(imageDataUrl);
   const outputSize = calculateOcrImageSize(
     image.naturalWidth,
@@ -36,6 +40,40 @@ export async function preprocessImageForOcr(
   context.putImageData(imageData, 0, 0);
 
   return canvas.toDataURL('image/png');
+}
+
+async function preprocessImageOffscreen(imageDataUrl: string): Promise<string> {
+  const image = await createImageBitmap(await (await fetch(imageDataUrl)).blob());
+  try {
+    const outputSize = calculateOcrImageSize(image.width, image.height);
+    const canvas = new OffscreenCanvas(outputSize.width, outputSize.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (context === null) throw new Error('Canvas is not available.');
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    applyGrayscaleAndContrast(imageData.data);
+    context.putImageData(imageData, 0, 0);
+
+    return blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' }));
+  } finally {
+    image.close();
+  }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return `data:${blob.type};base64,${btoa(binary)}`;
 }
 
 export function calculateOcrImageSize(

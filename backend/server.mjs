@@ -14,6 +14,10 @@ const dailyCharacterQuota = createCharacterQuota({
   maxCharacters: config.dailyCharacterLimit,
   windowMs: config.dailyQuotaWindowMs,
 });
+const globalDailyCharacterQuota = createCharacterQuota({
+  maxCharacters: config.globalDailyCharacterLimit,
+  windowMs: config.dailyQuotaWindowMs,
+});
 const deeplQuotaGuard = createDeepLQuotaGuard({
   fetchUsage: () =>
     requestDeepLUsage({
@@ -35,6 +39,7 @@ const app = createApp({
   config,
   rateLimiter,
   dailyCharacterQuota,
+  globalDailyCharacterQuota,
   deeplQuotaGuard,
 });
 const server = createServer(app);
@@ -56,6 +61,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     deeplQuotaGuard.stop();
     rateLimiter.clear();
     dailyCharacterQuota.clear();
+    globalDailyCharacterQuota.clear();
     server.close(() => process.exit(0));
   });
 }

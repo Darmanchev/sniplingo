@@ -30,6 +30,10 @@ describe('translation HTTP app', () => {
         deeplRetryMaxDelayMs: 100,
         maxRequestBytes: 1_024,
         maxTextCharacters: 3,
+        globalDailyCharacterLimit: 3,
+        logRequestMetrics: false,
+        logUsageMetrics: false,
+        blockedClientAddresses: [],
         trustProxy: false,
         allowMissingOrigin: false,
         allowAnyChromeExtension: false,
@@ -38,6 +42,10 @@ describe('translation HTTP app', () => {
       rateLimiter: createRateLimiter({ maxRequests: 10, windowMs: 60_000 }),
       dailyCharacterQuota: createCharacterQuota({
         maxCharacters: 100,
+        windowMs: 60_000,
+      }),
+      globalDailyCharacterQuota: createCharacterQuota({
+        maxCharacters: 3,
         windowMs: 60_000,
       }),
       deeplQuotaGuard: {
@@ -67,6 +75,20 @@ describe('translation HTTP app', () => {
     expect(accepted.status).toBe(200);
     expect(translate).toHaveBeenCalledOnce();
 
+    const exhaustedBudget = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'chrome-extension://allowedid',
+      },
+      body: JSON.stringify({ text: 'ABC', targetLanguage: 'ru' }),
+    });
+    expect(exhaustedBudget.status).toBe(503);
+    await expect(exhaustedBudget.json()).resolves.toEqual({
+      error: 'The daily translation budget is temporarily exhausted.',
+    });
+    expect(translate).toHaveBeenCalledOnce();
+
     const tooLong = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -85,6 +107,7 @@ describe('translation HTTP app', () => {
     expect(missingOrigin.status).toBe(403);
 
     const logs = logger.info.mock.calls.flat().join('\n');
+    expect(logger.info).not.toHaveBeenCalled();
     expect(logs).not.toContain('A🚀Б');
     expect(logs).not.toContain('secret-ocr-text');
     expect(logs).not.toContain('translated-secret');

@@ -63,6 +63,10 @@ export async function cropImage(
   rect: SelectionRect,
   viewport: ViewportSize,
 ): Promise<string> {
+  if (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined') {
+    return cropImageOffscreen(imageDataUrl, rect, viewport);
+  }
+
   const image = await loadImage(imageDataUrl);
   const cropRect = calculateCropRect(rect, viewport, {
     width: image.naturalWidth,
@@ -91,6 +95,49 @@ export async function cropImage(
   );
 
   return canvas.toDataURL('image/png');
+}
+
+async function cropImageOffscreen(
+  imageDataUrl: string,
+  rect: SelectionRect,
+  viewport: ViewportSize,
+): Promise<string> {
+  const image = await createImageBitmap(await (await fetch(imageDataUrl)).blob());
+  try {
+    const cropRect = calculateCropRect(rect, viewport, {
+      width: image.width,
+      height: image.height,
+    });
+    const canvas = new OffscreenCanvas(cropRect.width, cropRect.height);
+    const context = canvas.getContext('2d');
+    if (context === null) throw new Error('Canvas is not available.');
+
+    context.drawImage(
+      image,
+      cropRect.x,
+      cropRect.y,
+      cropRect.width,
+      cropRect.height,
+      0,
+      0,
+      cropRect.width,
+      cropRect.height,
+    );
+
+    return blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' }));
+  } finally {
+    image.close();
+  }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return `data:${blob.type};base64,${btoa(binary)}`;
 }
 
 function assertPositiveSize(size: ImageSize, label: string): void {

@@ -17,7 +17,7 @@ describe('OCR fixtures', () => {
       cacheMethod: 'none',
     });
     await worker.setParameters({
-      tessedit_pageseg_mode: PSM.SINGLE_LINE,
+      tessedit_pageseg_mode: PSM.AUTO,
     });
   });
 
@@ -28,6 +28,10 @@ describe('OCR fixtures', () => {
   it.each([
     ['english.png', 'THE QUICK BROWN FOX 123'],
     ['russian.png', 'БЫСТРАЯ КОРИЧНЕВАЯ ЛИСА 123'],
+    ['punctuation.png', 'Hello, world! Price: $10.50'],
+    ['small-text.png', 'Small OCR text 12345'],
+    ['dark-background.png', 'Dark background text 2026'],
+    ['multiline-mixed.png', 'English line 123\nРусская строка 456'],
   ])('recognizes %s', async (fixture, expected) => {
     const result = await worker.recognize(path.join(fixturesDirectory, fixture));
     expect(sanitizeOcrText(result.data.text)).toBe(expected);

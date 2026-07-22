@@ -27,7 +27,14 @@ export default defineBackground(() => {
   const extensionAction = browser.action ?? browser.browserAction;
 
   extensionAction.onClicked.addListener(async (tab) => {
-    if (tab.id === undefined || !isSupportedPage(tab.url)) return;
+    if (tab.id === undefined) return;
+
+    if (!isSupportedPage(tab.url)) {
+      await showUnsupportedPageError(tab.id, tab.url, extensionAction);
+      return;
+    }
+
+    await clearActionError(tab.id, extensionAction);
 
     const message: StartSelectionMessage = {
       type: START_SELECTION_MESSAGE,
@@ -69,11 +76,61 @@ function isSupportedPage(url: string | undefined): boolean {
   if (url === undefined) return false;
 
   try {
-    const protocol = new URL(url).protocol;
-    return protocol === 'http:' || protocol === 'https:';
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return false;
+    }
+
+    return parsedUrl.hostname !== 'addons.mozilla.org';
   } catch {
     return false;
   }
+}
+
+async function showUnsupportedPageError(
+  tabId: number,
+  url: string | undefined,
+  extensionAction: typeof browser.action,
+): Promise<void> {
+  const message = getUnsupportedPageMessage(url);
+
+  await Promise.allSettled([
+    extensionAction.setBadgeBackgroundColor({ color: '#b91c1c', tabId }),
+    extensionAction.setBadgeText({ text: '!', tabId }),
+    extensionAction.setTitle({ title: `SnipLingo: ${message}`, tabId }),
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: browser.runtime.getURL('/icon/96.png'),
+      title: 'SnipLingo cannot run here',
+      message,
+    }),
+  ]);
+}
+
+async function clearActionError(
+  tabId: number,
+  extensionAction: typeof browser.action,
+): Promise<void> {
+  await Promise.allSettled([
+    extensionAction.setBadgeText({ text: '', tabId }),
+    extensionAction.setTitle({
+      title: 'SnipLingo — select an area to translate',
+      tabId,
+    }),
+  ]);
+}
+
+function getUnsupportedPageMessage(url: string | undefined): string {
+  try {
+    const parsedUrl = new URL(url ?? '');
+    if (parsedUrl.hostname === 'addons.mozilla.org') {
+      return 'Firefox blocks extensions on addons.mozilla.org. Open a regular website and try again.';
+    }
+  } catch {
+    // Fall through to the generic browser-page explanation.
+  }
+
+  return 'Firefox does not allow extensions to capture internal pages such as about: and the Add-ons Manager.';
 }
 
 async function captureAndCrop(
@@ -91,6 +148,10 @@ async function captureAndCrop(
       message.rect,
       message.viewport,
     );
+
+    if (import.meta.env.MODE === 'e2e') {
+      await browser.storage.local.set({ e2eCroppedImage: croppedImage });
+    }
 
     return { ok: true, imageDataUrl: croppedImage };
   } catch (error) {

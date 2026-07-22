@@ -3,6 +3,7 @@ import { calculateCropRect } from '@/services/imageCrop';
 
 describe('calculateCropRect', () => {
   it.each([
+    { zoom: '80%', viewport: [2400, 1350], expected: [80, 40, 160, 80] },
     { zoom: '100%', viewport: [1920, 1080], expected: [100, 50, 200, 100] },
     { zoom: '125%', viewport: [1536, 864], expected: [125, 62, 250, 126] },
     { zoom: '150%', viewport: [1280, 720], expected: [150, 75, 300, 150] },
@@ -20,6 +21,16 @@ describe('calculateCropRect', () => {
       width: expected[2],
       height: expected[3],
     });
+  });
+
+  it('maps Retina/HiDPI screenshots using the captured pixel ratio', () => {
+    expect(
+      calculateCropRect(
+        { x: 120, y: 80, width: 300, height: 160 },
+        { width: 1440, height: 900 },
+        { width: 2880, height: 1800 },
+      ),
+    ).toEqual({ x: 240, y: 160, width: 600, height: 320 });
   });
 
   it('rounds outward so fractional edge pixels are not lost', () => {

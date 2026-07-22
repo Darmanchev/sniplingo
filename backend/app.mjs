@@ -19,6 +19,7 @@ export function createApp({
   config,
   rateLimiter,
   dailyCharacterQuota,
+  globalDailyCharacterQuota,
   deeplQuotaGuard,
   translate = requestDeepLTranslation,
   logger = console,
@@ -66,10 +67,11 @@ export function createApp({
         throw new HttpError(404, 'Route not found.', 'route_not_found');
       }
 
-      const identifier = hashIdentifier(
-        readClientAddress(request, config.trustProxy),
-        identifierSalt,
-      );
+      const clientAddress = readClientAddress(request, config.trustProxy);
+      if (config.blockedClientAddresses?.includes(clientAddress)) {
+        throw new HttpError(403, 'Request is blocked.', 'client_blocked');
+      }
+      const identifier = hashIdentifier(clientAddress, identifierSalt);
       const requestLimit = rateLimiter.consume(identifier, now());
       response.setHeader('X-RateLimit-Remaining', requestLimit.remaining);
       if (!requestLimit.allowed) {
@@ -103,6 +105,31 @@ export function createApp({
           'Daily character limit exceeded.',
           'daily_character_limit',
           dailyLimit.retryAfterSeconds,
+        );
+      }
+
+      const globalDailyLimit = globalDailyCharacterQuota.consume(
+        'global',
+        characterCount,
+        now(),
+      );
+      if (!globalDailyLimit.allowed) {
+        throw new HttpError(
+          503,
+          'The daily translation budget is temporarily exhausted.',
+          'global_daily_character_limit',
+          { 'Retry-After': String(globalDailyLimit.retryAfterSeconds) },
+        );
+      }
+
+      if (config.logUsageMetrics) {
+        logger.info(
+          JSON.stringify({
+            event: 'daily_character_budget',
+            used:
+              config.globalDailyCharacterLimit - globalDailyLimit.remaining,
+            limit: config.globalDailyCharacterLimit,
+          }),
         );
       }
 
@@ -148,16 +175,19 @@ export function createApp({
       const headers = error instanceof HttpError ? error.headers : {};
       sendJson(response, status, { error: message }, headers);
     } finally {
-      logger.info(
-        JSON.stringify({
-          requestId,
-          status,
-          durationMs: Math.max(0, now() - startedAt),
-          characterCount,
-          targetLanguage: targetLanguage ?? null,
-          errorType: errorType ?? null,
-        }),
-      );
+      if (config.logRequestMetrics) {
+        logger.info(
+          JSON.stringify({
+            event: 'translation_request',
+            requestId,
+            status,
+            durationMs: Math.max(0, now() - startedAt),
+            characterCount,
+            targetLanguage: targetLanguage ?? null,
+            errorType: errorType ?? null,
+          }),
+        );
+      }
     }
   };
 }

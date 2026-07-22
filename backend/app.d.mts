@@ -15,6 +15,10 @@ interface AppConfig {
   deeplRetryMaxDelayMs: number;
   maxRequestBytes: number;
   maxTextCharacters: number;
+  globalDailyCharacterLimit: number;
+  logRequestMetrics: boolean;
+  logUsageMetrics: boolean;
+  blockedClientAddresses: readonly string[];
   trustProxy: boolean;
   allowMissingOrigin: boolean;
   allowAnyChromeExtension: boolean;
@@ -25,6 +29,13 @@ interface AppOptions {
   config: AppConfig;
   rateLimiter: { consume(identifier: string, now?: number): LimitResult };
   dailyCharacterQuota: {
+    consume(
+      identifier: string,
+      characterCount: number,
+      now?: number,
+    ): LimitResult;
+  };
+  globalDailyCharacterQuota: {
     consume(
       identifier: string,
       characterCount: number,

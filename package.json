@@ -2,7 +2,7 @@
   "name": "sniplingo",
   "description": "Select a page area, recognize its text, and translate it.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -11,20 +11,27 @@
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
+    "build:e2e": "WXT_TRANSLATION_API_URL=http://127.0.0.1:18787/v1/translate wxt build --mode e2e",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
+    "check:firefox-manifest": "node scripts/check-firefox-manifest.mjs",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv2 --warnings-as-errors",
+    "sign:firefox": "web-ext sign --source-dir .output/firefox-mv2 --artifacts-dir .output/signed --channel=unlisted",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ocr": "vitest run --config vitest.ocr.config.ts"
+    "test:ocr": "vitest run --config vitest.ocr.config.ts",
+    "test:e2e": "npm run build:e2e && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.1",
     "@vitest/coverage-v8": "^4.1.10",
     "happy-dom": "^20.11.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
+    "web-ext": "^8.0.0",
     "wxt": "^0.20.27"
   },
   "dependencies": {

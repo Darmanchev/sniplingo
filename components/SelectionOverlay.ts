@@ -22,6 +22,7 @@ export class SelectionOverlay {
   private animationFrameId: number | null = null;
 
   constructor(private readonly options: SelectionOverlayOptions) {
+    this.host.dataset.sniplingo = 'selection-overlay';
     const shadowRoot = this.host.attachShadow({ mode: 'closed' });
 
     shadowRoot.innerHTML = `

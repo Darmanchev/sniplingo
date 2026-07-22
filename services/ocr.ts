@@ -58,7 +58,11 @@ export class OcrService {
 export function sanitizeOcrText(text: string): string {
   return text
     .normalize('NFC')
-    .replace(/[^\p{L}\p{M}\p{N}\r\n\t ]+/gu, ' ')
+    .replace(/\p{C}/gu, (character) =>
+      character === '\r' || character === '\n' || character === '\t'
+        ? character
+        : ' ',
+    )
     .replace(/[\t ]+/g, ' ')
     .replace(/ *\r?\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')

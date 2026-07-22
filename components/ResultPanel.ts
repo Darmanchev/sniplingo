@@ -79,7 +79,10 @@ export class ResultPanel {
     | null = null;
 
   constructor(private readonly options: ResultPanelOptions) {
-    const shadowRoot = this.host.attachShadow({ mode: 'closed' });
+    this.host.dataset.sniplingo = 'result-panel';
+    const shadowRoot = this.host.attachShadow({
+      mode: import.meta.env.MODE === 'e2e' ? 'open' : 'closed',
+    });
 
     shadowRoot.innerHTML = `
       <style>
@@ -321,6 +324,13 @@ export class ResultPanel {
           font-size: 12px;
         }
 
+        #privacy-disclosure {
+          margin: -4px 0 12px;
+          color: #475569;
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
         #target-language {
           min-width: 0;
           padding: 8px 10px;
@@ -438,6 +448,7 @@ export class ResultPanel {
                 </select>
                 <button id="translate" type="button">Translate</button>
               </div>
+              <p id="privacy-disclosure" hidden>Screenshots and OCR stay on this device. Clicking Translate sends only the text above to SnipLingo’s server and DeepL.</p>
               <p id="translation-placeholder" hidden>Select a language and click Translate.</p>
               <section id="translation-result" hidden>
                 <p id="translation-status" role="status" aria-live="polite"></p>
@@ -544,7 +555,8 @@ export class ResultPanel {
     this.error.hidden = true;
     this.columns.hidden = true;
     this.ocrProgress.hidden = false;
-    this.ocrProgress.textContent = 'Preparing OCR…';
+    this.ocrProgress.textContent =
+      'Preparing local OCR… The first scan can take up to a minute while the OCR model starts.';
     this.ocrError.hidden = true;
   }
 
@@ -773,6 +785,10 @@ export class ResultPanel {
     const hasText = this.recognizedText.length > 0;
     this.setActionsHidden(!hasText);
     this.translationControls.hidden = !hasText;
+    const privacyDisclosure = this.translationControls.nextElementSibling;
+    if (privacyDisclosure instanceof HTMLParagraphElement) {
+      privacyDisclosure.hidden = !hasText;
+    }
     this.translationPlaceholder.hidden = !hasText;
   }
 

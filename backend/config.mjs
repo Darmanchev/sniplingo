@@ -102,6 +102,24 @@ export function loadConfig(environment = process.env) {
       60_000,
       7 * 24 * 60 * 60_000,
     ),
+    globalDailyCharacterLimit: readInteger(
+      environment,
+      'GLOBAL_DAILY_CHARACTER_LIMIT',
+      250_000,
+      1,
+      100_000_000,
+    ),
+    logRequestMetrics: readBoolean(
+      environment,
+      'LOG_REQUEST_METRICS',
+      false,
+    ),
+    logUsageMetrics: readBoolean(
+      environment,
+      'LOG_USAGE_METRICS',
+      true,
+    ),
+    blockedClientAddresses: readList(environment.BLOCKED_CLIENT_ADDRESSES),
     trustProxy: readBoolean(environment, 'TRUST_PROXY', false),
     allowMissingOrigin: readBoolean(
       environment,
