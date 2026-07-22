@@ -1,6 +1,6 @@
 # SnipLingo Privacy Policy
 
-Effective date: July 21, 2026
+Effective date: July 22, 2026
 
 SnipLingo recognizes text in screenshots locally and sends text for translation
 only after the user clicks **Translate**.
@@ -35,10 +35,13 @@ deleted when their limit window expires or the server restarts.
 
 Per-request application logging is disabled for the public service. Aggregate
 daily character-budget logs contain only totals and never contain translated
-text, screenshots, IP addresses, URLs, or browser identifiers. The hosting
-provider, Render, processes network and service metadata under its own
-[privacy policy](https://render.com/privacy) and retains service logs according
-to the workspace plan (currently up to seven days on the Hobby plan).
+text, screenshots, IP addresses, URLs, or browser identifiers. The service is
+deployed using Coolify. The hosting infrastructure and reverse proxy may
+process standard network and service metadata, such as IP addresses, request
+times, and response status codes, as necessary to route traffic, provide TLS,
+maintain security, and operate the service. SnipLingo does not intentionally
+configure them to record screenshots, translation request bodies, or
+translation response bodies.
 
 SnipLingo does not sell data, use translation text for advertising, or use it
 to train models.
